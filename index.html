@@ -1,0 +1,857 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<script>
+/* ============================================================
+   ★ Firebase 設定（跟成績與錄音登記簿用同一個專案）
+   ★ ADMIN_EMAILS：管理者的 Gmail，可以看全部班級、改規則
+   ============================================================ */
+window.FIREBASE_CONFIG = {
+  apiKey: "AIzaSyCMLopKavGeDAZn3fQH12oCQarA8FgbP1k",
+  authDomain: "gradeb-a367f.firebaseapp.com",
+  projectId: "gradeb-a367f",
+  storageBucket: "gradeb-a367f.firebasestorage.app",
+  messagingSenderId: "397670471065",
+  appId: "1:397670471065:web:d858f94c57b707f127af08"
+};
+window.ADMIN_EMAILS = ["choilai6829@gmail.com"];
+</script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<style>html,body{margin:0}</style>
+</head>
+<body>
+<title>AMC 班級加減點</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=LXGW+WenKai+TC:wght@400;700&family=Noto+Sans+TC:wght@400;500;700;900&family=Outfit:wght@500;600;700;800&display=swap">
+<style>
+/* Layout: school-stationery scoreboard — blue grid-paper ground, white "index card" student tiles held by a strip of washi tape, highlighter-marker accents on numbers. Single light look by choice. */
+:root{
+  --paper:#f4f8fd; --grid:#e2ebf6; --card:#ffffff; --ink:#15233f; --muted:#5d6c87; --line:#d8e3f1; --sunk:#eef3fa;
+  --blue:#2f6fed; --blue-s:#e3ecfd; --plus:#0f9d58; --plus-s:#dcf5e6; --minus:#e0444f; --minus-s:#fde3e5;
+  --hl:#ffe45c; --hl-g:#b7f0cf; --hl-p:#ffc6d3; --hl-b:#bfdcff; --hl-o:#ffd6a8; --hl-v:#dccbff;
+  --f-head:"LXGW WenKai TC","Noto Sans TC","PingFang TC",serif;
+  --f-ui:"Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif;
+  --f-num:"Outfit","Noto Sans TC",system-ui,sans-serif;
+  color-scheme:light;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{margin:0}
+body{background-color:var(--paper);background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);background-size:28px 28px;color:var(--ink);font-family:var(--f-ui);font-size:15px;line-height:1.55;-webkit-font-smoothing:antialiased}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+button:disabled{opacity:.45;cursor:not-allowed}
+:focus-visible{outline:3px solid var(--blue);outline-offset:2px}
+.wrap{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));max-width:1320px;margin:0 auto}
+
+/* header */
+.hd{background:var(--card);border-bottom:2px solid var(--ink)}
+.hd .wrap{padding-block:18px 14px;display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:10px 16px}
+.brand{display:flex;align-items:center;gap:14px}
+.stamp{width:54px;height:54px;border:2.5px solid var(--ink);border-radius:14px;display:grid;place-items:center;font-family:var(--f-num);font-weight:800;font-size:22px;background:var(--hl);transform:rotate(-4deg);box-shadow:3px 3px 0 var(--ink);flex:none}
+.eyebrow{font-family:var(--f-num);font-weight:700;letter-spacing:.18em;font-size:12px;color:var(--blue)}
+.ttl{margin:0;font-family:var(--f-head);font-weight:700;font-size:clamp(26px,4vw,34px);line-height:1.1}
+.ttl mark{background:linear-gradient(transparent 58%,var(--hl) 58%,var(--hl) 92%,transparent 92%);color:inherit;padding:0 2px}
+.who{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:13px;color:var(--muted)}
+.pill{display:inline-flex;align-items:center;gap:6px;border:1.5px solid var(--line);border-radius:999px;padding:3px 11px;background:var(--card)}
+.pill .dot{width:8px;height:8px;border-radius:50%;background:var(--plus)}
+.bar2{background:var(--card);border-bottom:1px solid var(--line)}
+.bar2 .wrap{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding-block:10px}
+.cchip{border:2px solid var(--ink);background:var(--card);border-radius:10px;padding:5px 14px;font-weight:700;font-size:15px;font-family:var(--f-num);transition:transform .12s}
+.cchip:hover{transform:translateY(-1px)}
+.cchip.on{background:var(--ink);color:#fff;box-shadow:3px 3px 0 var(--hl)}
+.cchip .ct{font-family:var(--f-ui);font-size:11px;font-weight:500;margin-left:6px;opacity:.75}
+.cchip.add{border-style:dashed;color:var(--muted)}
+.tools .wrap{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding-block:16px 4px}
+.nb{display:inline-flex;align-items:center;gap:7px;border:1.5px solid var(--line);background:var(--card);border-radius:12px;padding:8px 14px;font-weight:700;font-size:14px;color:var(--ink)}
+.nb:hover{border-color:var(--ink)}
+.nb.on{background:var(--hl);border-color:var(--ink);box-shadow:2px 2px 0 var(--ink)}
+.nb .k{width:20px;height:20px;border-radius:6px;display:grid;place-items:center;font-size:12px;font-weight:900;background:var(--sunk)}
+.nb.proj{margin-left:auto;background:var(--ink);border-color:var(--ink);color:#fff}
+.nb.proj .k{background:rgba(255,255,255,.18)}
+.sorts{display:inline-flex;border:1.5px solid var(--line);border-radius:12px;overflow:hidden;background:var(--card)}
+.sorts button{border:0;background:none;padding:7px 12px;font-weight:700;font-size:13px;color:var(--muted)}
+.sorts button.on{background:var(--blue-s);color:var(--blue)}
+main{padding-block:10px 130px}
+
+/* class summary strip */
+.sum{display:flex;flex-wrap:wrap;gap:10px;margin:6px 0 14px}
+.sum .s{background:var(--card);border:1.5px solid var(--line);border-radius:14px;padding:8px 14px;min-width:120px}
+.sum .s span{display:block;font-size:12px;color:var(--muted);font-weight:700;letter-spacing:.06em}
+.sum .s b{font-family:var(--f-num);font-size:24px;font-weight:700;font-variant-numeric:tabular-nums}
+.sum .s.p b{color:var(--plus)}.sum .s.n b{color:var(--minus)}
+
+/* student cards */
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(178px,1fr));gap:16px}
+.card{--tape:var(--hl);position:relative;text-align:left;background:var(--card);border:1.5px solid var(--line);border-radius:6px 6px 14px 14px;padding:20px 14px 12px;display:flex;flex-direction:column;gap:6px;min-width:0;box-shadow:0 1px 0 var(--line),0 10px 20px -16px rgba(21,35,63,.45);transition:transform .15s,box-shadow .15s}
+.card::before{content:"";position:absolute;top:-9px;left:50%;width:74px;height:20px;margin-left:-37px;background:var(--tape);opacity:.85;transform:rotate(-2deg);border-left:2px dotted rgba(255,255,255,.6);border-right:2px dotted rgba(255,255,255,.6)}
+.card:hover{transform:translateY(-3px) rotate(-.4deg);box-shadow:0 1px 0 var(--line),0 16px 26px -16px rgba(21,35,63,.5)}
+.card.sel{border-color:var(--ink);box-shadow:4px 4px 0 var(--ink)}
+.card .tick{position:absolute;top:10px;left:10px;width:24px;height:24px;border-radius:6px;border:2px solid var(--line);background:#fff;display:none;place-items:center;color:#fff;font-weight:900;font-size:13px}
+.batch .card .tick{display:grid}
+.card.sel .tick{background:var(--ink);border-color:var(--ink)}
+.seat{position:absolute;top:10px;right:12px;font-family:var(--f-num);font-size:12px;color:var(--muted);font-weight:600}
+.nm{font-family:var(--f-head);font-weight:700;font-size:22px;line-height:1.15;word-break:break-all}
+.nk{font-size:12px;color:var(--muted)}
+.pts{font-family:var(--f-num);font-weight:800;font-size:46px;line-height:1;font-variant-numeric:tabular-nums;letter-spacing:-.02em;margin-top:4px}
+.pts small{font-size:14px;font-weight:600;color:var(--muted);margin-left:4px;letter-spacing:0}
+.pts.neg{color:var(--minus)}
+.wk{display:flex;gap:6px;flex-wrap:wrap}
+.wk span{font-family:var(--f-num);font-weight:700;font-size:13px;border-radius:6px;padding:0 7px}
+.wk .p{background:var(--plus-s);color:var(--plus)}.wk .n{background:var(--minus-s);color:var(--minus)}.wk .z{background:var(--sunk);color:var(--muted)}
+.coin{display:inline-flex;align-items:center;gap:4px;align-self:flex-start;background:#fff6cf;border:1.5px solid #f2d36b;border-radius:999px;padding:1px 10px 1px 5px;font-size:12.5px;font-weight:700;color:#8a5a00}
+.coin b{font-family:var(--f-num);font-size:15px}
+.jt{border-collapse:collapse;font-size:13px;width:100%}
+.jt th,.jt td{border-bottom:1px dashed var(--line);padding:6px 4px;text-align:center;white-space:nowrap}
+.jt th{font-size:11.5px;color:var(--muted)}
+.jt td:first-child,.jt th:first-child{text-align:left}
+.jc{display:inline-block;min-width:30px;border-radius:6px;padding:1px 4px;font-family:var(--f-num);font-weight:700}
+.jc.full{background:var(--plus-s);color:var(--plus)}.jc.part{background:#fff6cf;color:#8a5a00}.jc.none{color:var(--line)}
+.marks{display:flex;flex-wrap:wrap;gap:3px;margin-top:4px}
+.marks i{white-space:nowrap}
+.marks i{font-style:normal;font-size:10.5px;font-weight:800;border-radius:4px;padding:0 4px;background:var(--sunk);color:var(--muted)}
+.marks i.f{background:var(--plus-s);color:var(--plus)}.marks i.r{background:#fff6cf;color:#8a5a00}
+.pick{flex-wrap:wrap}
+.pick .marks{flex-basis:100%;padding-left:30px;min-width:0}
+.cust{display:flex;flex-wrap:wrap;gap:8px;align-items:end;margin-top:10px;padding:10px;border:1.5px dashed var(--line);border-radius:12px}
+.cust label.f{flex:1 1 140px}
+.jlbtns{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px}
+.ib.coinb{background:#fff6cf}.ib.coinb b{color:#b77900}
+.ib.coinr{background:var(--sunk)}.ib.coinr b{color:#b77900}
+.recent{display:flex;flex-wrap:wrap;gap:4px;min-height:22px}
+.recent i{font-style:normal;font-size:11.5px;font-weight:700;border-radius:6px;padding:0 6px;line-height:20px;white-space:nowrap}
+.recent .p{background:var(--plus-s);color:var(--plus)}.recent .n{background:var(--minus-s);color:var(--minus)}.recent .z{background:var(--sunk);color:var(--muted)}
+.rank{position:absolute;top:-14px;right:10px;font-family:var(--f-num);font-weight:800;font-size:13px;background:var(--ink);color:#fff;border-radius:999px;padding:1px 9px}
+.flash-p{animation:fp .7s ease-out}.flash-n{animation:fn .7s ease-out}
+@keyframes fp{0%{box-shadow:0 0 0 6px var(--hl-g)}100%{box-shadow:0 1px 0 var(--line),0 10px 20px -16px rgba(21,35,63,.45)}}
+@keyframes fn{0%{box-shadow:0 0 0 6px var(--hl-p)}100%{box-shadow:0 1px 0 var(--line),0 10px 20px -16px rgba(21,35,63,.45)}}
+
+/* modal */
+.modal{position:fixed;inset:0;z-index:20;background:rgba(21,35,63,.42);display:grid;place-items:center;padding:14px}
+.sheet{background:var(--card);border:2px solid var(--ink);border-radius:18px;width:min(760px,100%);max-height:calc(100% - 16px);overflow:auto;padding:22px;box-shadow:6px 6px 0 var(--ink)}
+.sheet.wide{width:min(1100px,100%)}
+.sheet h2{margin:0;font-family:var(--f-head);font-size:26px;font-weight:700}
+.sheet h3{margin:18px 0 8px;font-size:12px;color:var(--muted);letter-spacing:.12em;font-weight:700}
+.sheet p{margin:4px 0;color:var(--muted)}
+.shtop{display:flex;align-items:flex-start;gap:10px;justify-content:space-between;flex-wrap:wrap}
+.tabs{display:flex;gap:6px;flex-wrap:wrap;margin:12px 0 4px}
+.tab{border:1.5px solid var(--line);background:var(--card);border-radius:10px;padding:5px 14px;font-weight:700;color:var(--muted)}
+.tab.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+.bigpts{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin-top:8px}
+.bigpts b{font-family:var(--f-num);font-size:64px;font-weight:800;line-height:1;background:linear-gradient(transparent 60%,var(--hl) 60%,var(--hl) 92%,transparent 92%)}
+.items{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px}
+.ib{border-radius:14px;padding:14px 16px;text-align:left;font-weight:900;font-size:18px;display:flex;gap:12px;align-items:center;border:2px solid transparent;min-height:66px;transition:transform .1s}
+.ib b{font-family:var(--f-num);font-size:28px;font-weight:800;min-width:46px}
+.ib.plus{background:var(--plus-s);color:var(--ink)}.ib.plus b{color:var(--plus)}
+.ib.minus{background:var(--minus-s);color:var(--ink)}.ib.minus b{color:var(--minus)}
+.ib.zero{background:var(--sunk)}.ib.zero b{color:var(--muted);font-size:18px}
+.ib:hover{border-color:var(--ink)}
+.ib:active{transform:scale(.97)}
+.picks{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+.pick{display:flex;align-items:center;gap:8px;border:2px solid var(--line);background:#fff;border-radius:12px;padding:10px 12px;text-align:left;font-weight:700;transition:transform .1s}
+.pick:hover{border-color:var(--ink)}
+.pick .pn{font-family:var(--f-num);font-size:12px;color:var(--muted);width:22px}
+.pick .pm{flex:1;min-width:0;font-family:var(--f-head);font-size:18px;word-break:break-all}
+.pick .pp{font-family:var(--f-num);font-weight:800;color:var(--muted)}
+.pick.on{background:var(--hl);border-color:var(--ink);box-shadow:3px 3px 0 var(--ink)}
+.pick.on .pn{color:var(--ink)}
+.pick:active{transform:scale(.97)}
+.batchbar .ib{min-height:0;padding:7px 12px;font-size:14px}.batchbar .ib b{font-size:18px;min-width:30px}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.btn{border:1.5px solid var(--line);background:var(--card);border-radius:10px;padding:7px 14px;font-size:14px;font-weight:700}
+.btn:hover{border-color:var(--ink)}
+.btn.pri{background:var(--ink);color:#fff;border-color:var(--ink)}
+.btn.warn{color:var(--minus);border-color:#f3c3c7}
+.btn.armed{background:var(--minus);color:#fff;border-color:var(--minus)}
+.btn.sm{padding:4px 10px;font-size:13px}
+label.f{display:flex;flex-direction:column;gap:4px;font-weight:700;font-size:12px;letter-spacing:.06em;color:var(--muted)}
+.fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+input[type=number],input[type=text],input[type=date],select,textarea{background:var(--sunk);border:1.5px solid transparent;border-radius:10px;padding:8px 11px;width:100%;min-width:0;color:var(--ink)}
+input:focus,select:focus,textarea:focus{border-color:var(--blue);background:#fff;outline:none}
+textarea{min-height:110px;resize:vertical;line-height:1.5}
+.note{font-size:13px;color:var(--muted)}
+.chip{font-size:12px;font-weight:700;border-radius:999px;padding:1px 9px;background:var(--sunk);color:var(--muted);white-space:nowrap}
+.chip.ok{background:var(--plus-s);color:var(--plus)}
+.tbl{width:100%;border-collapse:collapse;font-size:14px}
+.tbl th,.tbl td{padding:8px 6px;border-bottom:1px dashed var(--line);text-align:left;vertical-align:middle}
+.tbl th{color:var(--muted);font-weight:700;font-size:12px;letter-spacing:.08em}
+.tbl td.num{font-family:var(--f-num);font-weight:700;font-size:16px;font-variant-numeric:tabular-nums}
+.tbl td.pos{color:var(--plus)}.tbl td.neg{color:var(--minus)}
+.tbl input,.tbl select{padding:5px 8px}
+.scroll{overflow-x:auto}
+.log{list-style:none;margin:0;padding:0}
+.log li{display:flex;align-items:flex-start;gap:10px;padding:8px 2px;border-bottom:1px dashed var(--line);flex-wrap:wrap}
+.log .t{font-family:var(--f-num);color:var(--muted);font-size:13px;font-variant-numeric:tabular-nums;min-width:86px}
+.log .d{font-family:var(--f-num);font-weight:800;min-width:34px}
+.log .d.p{color:var(--plus)}.log .d.n{color:var(--minus)}
+.log .x{margin-left:auto}
+.log li.void{opacity:.5}.log li.void .what{text-decoration:line-through}
+.log .what{flex:1 1 200px;min-width:0}
+.log .by{font-size:12px;color:var(--muted)}
+.tchk{display:flex;flex-wrap:wrap;gap:6px}
+.tchk label{display:inline-flex;align-items:center;gap:4px;background:var(--sunk);border-radius:999px;padding:2px 10px;font-size:13px;font-weight:700;cursor:pointer}
+.ovk{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:10px 0}
+.ovk .k{border:1.5px solid var(--line);border-radius:14px;padding:10px 14px;background:var(--card)}
+.ovk .k span{font-size:12px;font-weight:700;color:var(--muted);letter-spacing:.06em}
+.ovk .k b{display:block;font-family:var(--f-num);font-size:30px;font-weight:800;line-height:1.1}
+.ovk .k.p b{color:var(--plus)}.ovk .k.n b{color:var(--minus)}
+.ibar{display:inline-block;height:10px;border-radius:3px;vertical-align:middle;margin-right:6px}
+
+/* batch bar */
+.batchbar{position:fixed;left:0;right:0;bottom:0;z-index:8;background:var(--card);border-top:2px solid var(--ink);padding-bottom:env(safe-area-inset-bottom,0px)}
+.batchbar .wrap{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding-block:10px}
+.batchbar .cnt{font-weight:900;margin-right:6px;background:var(--hl);padding:2px 8px;border-radius:6px}
+
+/* projection */
+.projexit{position:fixed;right:max(12px,env(safe-area-inset-right,0px));top:calc(12px + env(safe-area-inset-top,0px));z-index:9;display:none}
+body.proj .projexit{display:inline-flex}
+body.proj .tools,body.proj .who,body.proj .adminonly,body.proj .recent,body.proj .wk .n{display:none!important}
+body.proj .grid{grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:22px}
+body.proj .nm{font-size:28px}
+body.proj .pts{font-size:64px}
+
+#toasts{position:fixed;right:max(16px,env(safe-area-inset-right,0px));bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:40;display:flex;flex-direction:column;gap:8px;align-items:flex-end;pointer-events:none}
+.toast{background:var(--ink);color:#fff;border-radius:12px;padding:9px 14px;font-weight:700;box-shadow:3px 3px 0 var(--hl);animation:tin .25s ease-out;max-width:min(420px,90vw)}
+.toast.neg{background:var(--minus);box-shadow:3px 3px 0 var(--hl-p)}
+.batching #toasts{bottom:calc(120px + env(safe-area-inset-bottom,0px))}
+@keyframes tin{from{transform:translateY(10px);opacity:0}}
+.empty{max-width:560px;margin:30px auto;display:flex;flex-direction:column;gap:12px;text-align:center;align-items:center;color:var(--muted);background:var(--card);border:1.5px solid var(--line);border-radius:16px;padding:30px 20px}
+.empty h2{margin:0;font-family:var(--f-head);font-size:26px;color:var(--ink)}
+@media (max-width:560px){.grid{grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}.pts{font-size:38px}.nm{font-size:19px}.sheet{padding:14px}.nb.proj{margin-left:0}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+
+<header class="hd"><div class="wrap">
+  <div class="brand"><div class="stamp" aria-hidden="true">+3</div>
+    <div><div class="eyebrow">AMC · CLASS POINTS</div><h1 class="ttl"><mark>班級加減點</mark></h1></div></div>
+  <div class="who"><span class="pill"><span class="dot" id="stDot"></span><span id="stTxt">連線中…</span></span><span id="meTxt" hidden></span><button class="btn sm" id="bLogout" hidden>登出</button></div>
+</div></header>
+<div class="bar2"><div class="wrap" id="classBar"></div></div>
+<div class="tools"><div class="wrap">
+  <button class="nb" id="bBatch"><span class="k">✓</span>批次加減點</button>
+  <button class="nb" id="bJl"><span class="k">傑</span>發送傑立幣</button>
+  <button class="nb" id="bLog"><span class="k">≡</span>異動紀錄</button>
+  <button class="nb" id="bManage"><span class="k">☰</span>班級與學生</button>
+  <button class="nb" id="bOv"><span class="k">▤</span>全校總覽</button>
+  <button class="nb" id="bSet"><span class="k">⚙</span>規則設定</button>
+  <span class="sorts" role="group" aria-label="排序"><button data-sort="seat">座號</button><button data-sort="pts">總點數高→低</button><button data-sort="week">本週</button></span>
+  <button class="nb proj" id="bProj"><span class="k">▣</span>投影模式</button>
+</div></div>
+<button class="btn pri projexit" id="bProjExit">離開投影</button>
+<main class="wrap"><div id="sum" class="sum"></div><div id="grid" class="grid"></div></main>
+<div id="batchBar" class="batchbar" hidden><div class="wrap" id="batchInner"></div></div>
+<div id="modal" class="modal" hidden><div class="sheet" id="sheet" role="dialog" aria-modal="true"></div></div>
+<div id="toasts"></div>
+<div id="login" class="modal" hidden><div class="sheet" style="max-width:440px;text-align:center"><div class="stamp" style="margin:0 auto 10px">+3</div><h2>班級加減點</h2><p style="margin:8px 0 16px">請用老師的 Google 帳號登入</p><div id="inApp"></div><button class="btn pri" id="gLogin" style="font-size:16px;padding:10px 22px">用 Google 登入</button><p class="note" id="loginErr" style="margin-top:10px"></p></div></div>
+
+<script>
+const DEF_ITEMS=[
+  {id:'hw',n:'準時交作業',p:2},{id:'exam',n:'考試 100 分',p:3},{id:'exam95',n:'考試 95 分',p:2},{id:'exam90',n:'考試 90 分',p:1},{id:'late0',n:'當天補交',p:1,kind:'hw_late'},{id:'late1',n:'隔天補交',p:1,kind:'hw_late'},
+  {id:'miss',n:'沒有交功課',p:-3,kind:'hw_miss'},{id:'bag',n:'沒有帶美語袋',p:-5},{id:'fail',n:'考試未通過',p:0}
+];
+const TAPES=['var(--hl)','var(--hl-g)','var(--hl-p)','var(--hl-b)','var(--hl-o)','var(--hl-v)'];
+const $=s=>document.querySelector(s);
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+const sg=n=>(n>0?'+':n<0?'−':'±')+Math.abs(n);
+const clone=o=>JSON.parse(JSON.stringify(o));
+const fmtT=t=>{const d=new Date(t);return `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`};
+function hashStr(s){let h=2166136261;for(const ch of String(s)){h^=ch.charCodeAt(0);h=Math.imul(h,16777619)}return h>>>0}
+function lsGet(k){try{return localStorage.getItem('amcPts.'+k)}catch(e){return null}}
+function lsSet(k,v){try{localStorage.setItem('amcPts.'+k,v)}catch(e){}}
+
+let CFG={items:clone(DEF_ITEMS)};
+let CLASSES={},STUDENTS={};
+let CUR=lsGet('class')||null;
+let DB=null,USER=null,ME='me',CAN=true,LOCAL=false,READY=false,IS_OWNER=true,TEACHERS={};
+let VIEW_ALL=lsGet('viewAll')!=='0';
+let SORT=lsGet('sort')||'seat';
+let SPOV={};const RCACHE=new Map();const LOCAL_HATCH={};function refreshSpecies(){}
+const UI={batch:false,sel:new Set(),proj:false,flash:{}};
+const LOCAL_EV={},PENDING={},INFLIGHT={},NEWSTU=new Set();
+const PROFILES={};
+function mergeCfg(d){const c={items:clone(DEF_ITEMS)};if(d&&Array.isArray(d.items)&&d.items.length)c.items=d.items;return c}
+
+/* points derived from the event log (voided events never count) */
+const live=s=>(s.events||[]).filter(e=>!e.v&&(e.k==='item'||e.k==='adj'));
+const initPts=s=>(s.events||[]).filter(e=>!e.v&&e.k==='init').reduce((a,e)=>a+(e.d||0),0);
+const initJl=s=>(s.events||[]).filter(e=>!e.v&&e.k==='jlinit').reduce((a,e)=>a+(e.d||0),0);
+/* 傑立幣：每課 單字3＋單元考3＋Sensay3，三項都一次通過再 +1＝10；補考通過 +1；期中／期末 筆試5＋口說5；一冊最多 100 */
+const JL_COMP={vocab:['單字',3],unit:['單元考',3],sensay:['Sensay',3],w:['筆試',5],o:['口說',5]};
+const JL_LES=[['1','第 1 課'],['2','第 2 課'],['3','第 3 課'],['4','第 4 課'],['5','第 5 課'],['6','第 6 課'],['7','第 7 課'],['8','第 8 課'],['mid','期中考'],['fin','期末考']];
+const lesName=l=>(JL_LES.find(x=>x[0]===l)||[l,l])[1];
+const compsOf=l=>/^\d+$/.test(l)?['vocab','unit','sensay']:['w','o'];
+const JL_CAP=100;
+function jlLedger(s){
+  const books={};let adj=initJl(s);
+  const evs=(s.events||[]).filter(e=>!e.v&&(e.k==='jl'||e.k==='jladj')).sort((a,b)=>a.t-b.t);
+  for(const e of evs){
+    if(e.k==='jladj'){adj+=e.d||0;continue}
+    const b=books[e.book]||(books[e.book]={les:{},total:0,raw:0});
+    const L=b.les[e.les]||(b.les[e.les]={});
+    if(L[e.comp])continue;
+    L[e.comp]={kind:e.kind,d:e.d,t:e.t,id:e.id};
+  }
+  let earned=0;
+  for(const name in books){
+    const b=books[name];let raw=0;
+    for(const l in b.les){const L=b.les[l];let sum=0;for(const c in L)sum+=L[c].d||0;
+      L._bonus=compsOf(l).length===3&&compsOf(l).every(c=>L[c]&&L[c].kind==='first')?1:0;sum+=L._bonus;L._sum=sum;raw+=sum}
+    b.raw=raw;b.total=Math.min(JL_CAP,raw);earned+=b.total;
+  }
+  return{books,earned,adj,bal:earned+adj};
+}
+const COIN=`<svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true" style="vertical-align:-3px"><circle cx="10" cy="10" r="9" fill="#ffd34d" stroke="#c98a00" stroke-width="1.6"/><circle cx="10" cy="10" r="6" fill="none" stroke="#c98a00" stroke-width="1.2"/><text x="10" y="13.4" text-anchor="middle" font-size="8.5" font-weight="900" fill="#8a5a00" font-family="sans-serif">傑</text></svg>`;
+function weekStart(){const n=new Date(),d0=new Date(n.getFullYear(),n.getMonth(),n.getDate()).getTime();return d0-((n.getDay()+6)%7)*86400000}
+function stats(s,from){
+  let tot=0,wp=0,wn=0;const ws=from==null?weekStart():from;
+  tot=initPts(s);
+  for(const e of live(s)){const d=e.d||0;tot+=d;if(e.t>=ws){if(d>0)wp+=d;if(d<0)wn+=d}}
+  return{tot,wp,wn};
+}
+
+function setStatus(k){const m={wait:['#f5a800','連線中…'],ok:['#0f9a6e','雲端資料庫已連線'],local:['#f97316','預覽模式（只存在這台電腦）'],err:['#e2334f','連線中斷，請重新整理'],ro:['#3b82f6','只能查看']}[k];$('#stDot').style.background=m[0];$('#stTxt').textContent=m[1]}
+function localSave(){try{localStorage.setItem('amcPts.data',JSON.stringify({classes:CLASSES,students:STUDENTS,cfg:CFG}))}catch(e){}}
+function cleanStu(s){const o=clone(s);delete o.id;return o}
+function queueWrite(sid){
+  if(LOCAL){localSave();return}
+  if(!DB)return;
+  clearTimeout(PENDING[sid]);
+  PENDING[sid]=setTimeout(()=>flushStu(sid),260);
+}
+function flushStu(sid){
+  delete PENDING[sid];
+  const run=async()=>{const s=STUDENTS[sid];if(!s)return;try{await DB.doc('ac_students/'+sid).set(cleanStu(s))}catch(e){writeErr(e)}};
+  INFLIGHT[sid]=(INFLIGHT[sid]||Promise.resolve()).then(run);
+}
+let errAt=0;
+function writeErr(e){if(Date.now()-errAt<4000)return;errAt=Date.now();const c=e&&e.code;toast(c==='invalid_argument'||c==='permission-denied'?'你的帳號只能查看，不能修改':c==='quota_exceeded'?'資料庫空間已滿，請匯出備份後清理舊資料':'沒有存到雲端，請檢查網路',1)}
+async function saveDoc(path,data){
+  if(LOCAL){localSave();return}
+  try{await DB.doc(path).set(clone(data))}catch(e){writeErr(e)}
+}
+function applyStudents(snap){
+  const seen=new Set();
+  snap.docs.forEach(d=>{
+    if(!d.exists)return;
+    const data=clone(d.data());data.id=d.id;seen.add(d.id);NEWSTU.delete(d.id);
+    let need=false;
+    const lx=LOCAL_EV[d.id];
+    if(lx&&lx.size){
+      const map=new Map((data.events||[]).map(e=>[e.id,e]));
+      for(const [id,ev] of lx){const r=map.get(id);if(!r||(ev.v&&!r.v)){map.set(id,ev);need=true}else lx.delete(id)}
+      data.events=[...map.values()];
+    }
+    const lh=LOCAL_HATCH[d.id];
+    if(lh){data.hatch=data.hatch||{};for(const n in lh){if(data.hatch[n]==null){data.hatch[n]=lh[n];need=true}else delete lh[n]}}
+    if(PENDING[d.id]&&STUDENTS[d.id]){const loc=STUDENTS[d.id];for(const k of ['name','nick','active','classId','say'])data[k]=loc[k]}
+    STUDENTS[d.id]=data;
+    if(need)queueWrite(d.id);
+  });
+  for(const id of Object.keys(STUDENTS)){if(!seen.has(id)&&!NEWSTU.has(id)&&!PENDING[id])delete STUDENTS[id]}
+  render();
+}
+let unsubStu=null;
+function subscribeClass(){
+  if(LOCAL||!DB)return;
+  if(unsubStu){try{unsubStu()}catch(e){}unsubStu=null}
+  STUDENTS={};
+  if(!CUR){render();return}
+  unsubStu=DB.collection('ac_students').where('classId','==',CUR).onSnapshot(applyStudents,()=>setStatus('err'));
+}
+const FBC=window.FIREBASE_CONFIG||{};
+const FB=!!(FBC.apiKey&&FBC.projectId&&window.firebase);
+let FBU=null,FBUSER=null;
+const UA=navigator.userAgent||'',IN_LINE=/ Line\//i.test(UA),IN_APP=IN_LINE||/FBAN|FBAV|Instagram|MicroMessenger|KAKAOTALK/i.test(UA);
+if(IN_LINE&&!/openExternalBrowser=1/.test(location.search))location.replace(location.pathname+(location.search?location.search+'&':'?')+'openExternalBrowser=1'+location.hash);
+function fbStart(){
+  return new Promise(res=>{
+    firebase.initializeApp(FBC);
+    const fs=firebase.firestore(),auth=firebase.auth();
+    $('#gLogin').onclick=()=>auth.signInWithPopup(new firebase.auth.GoogleAuthProvider()).catch(e=>{if(e.code!=='auth/popup-closed-by-user'&&e.code!=='auth/cancelled-popup-request')$('#loginErr').textContent='登入失敗：'+(e.message||e.code)});
+    $('#bLogout').onclick=()=>auth.signOut().then(()=>location.reload());
+    if(IN_APP)$('#inApp').innerHTML='<div class="cust" style="text-align:left;margin-bottom:12px"><b>請改用 Safari 或 Chrome 開啟。</b>App 內建的瀏覽器不能登入 Google。</div>';
+    let done=false;
+    auth.onAuthStateChanged(u=>{
+      if(!u){$('#login').hidden=false;setStatus('wait');return}
+      $('#login').hidden=true;FBU=u;
+      const em=(u.email||'').toLowerCase();
+      FBUSER={id:async()=>u.uid,isOwner:async()=>(window.ADMIN_EMAILS||[]).map(x=>x.toLowerCase()).includes(em),canEdit:async()=>true,me:async()=>({name:u.displayName||u.email}),
+        profiles:async ids=>{const o={};ids.forEach(id=>{const t=TEACHERS[id];if(t)o[id]={name:t.name||t.email||''}});return o}};
+      $('#bLogout').hidden=false;
+      if(!done){done=true;res(fs)}
+    });
+  });
+}
+async function init(){
+  let db=null;
+  if(FB)db=await fbStart();
+  else try{db=await window.claude?.use?.('db')}catch(e){}
+  if(!db){
+    LOCAL=true;
+    try{const d=JSON.parse(localStorage.getItem('amcPts.data'));if(d){CLASSES=d.classes||{};STUDENTS=d.students||{};CFG=mergeCfg(d.cfg)}}catch(e){}
+    refreshSpecies();READY=true;setStatus('local');pickClass();render();return;
+  }
+  DB=db;
+  try{USER=FB?FBUSER:await window.claude.use('user');if(USER){ME=(await USER.id())||'me';IS_OWNER=!!(await USER.isOwner());const ce=await USER.canEdit();CAN=!!ce||IS_OWNER;const p=await USER.me();if(p&&p.name){PROFILES[ME]=p.name;$('#meTxt').textContent=(IS_OWNER?'管理者 · ':'老師 · ')+p.name;$('#meTxt').hidden=false}}}catch(e){IS_OWNER=false}
+  setStatus(CAN?'ok':'ro');
+  if(CAN&&ME!=='me')DB.doc('ac_teachers/'+ME).set({seen:Date.now(),owner:IS_OWNER?1:0,...(FB&&FBU?{name:FBU.displayName||'',email:FBU.email||''}:{})}).catch(()=>{});
+  DB.collection('ac_teachers').onSnapshot(s=>{TEACHERS={};s.docs.forEach(d=>{if(d.exists){TEACHERS[d.id]=clone(d.data());if(FB&&TEACHERS[d.id].name)PROFILES[d.id]=TEACHERS[d.id].name}});loadNames(Object.keys(TEACHERS))},()=>{});
+  DB.doc('ac_config/points').onSnapshot(d=>{CFG=mergeCfg(d.exists?clone(d.data()):null);render()},()=>{});
+  DB.collection('ac_classes').onSnapshot(s=>{
+    const m={};s.docs.forEach(d=>{if(d.exists){m[d.id]={...clone(d.data()),id:d.id}}});
+    for(const id in CLASSES)if(CLASSES[id]._new&&!m[id])m[id]=CLASSES[id];
+    CLASSES=m;READY=true;const before=CUR;pickClass();if(before!==CUR||!unsubStu)subscribeClass();render();
+  },()=>setStatus('err'));
+}
+function canSee(c){if(LOCAL||(IS_OWNER&&VIEW_ALL))return true;return (c.teachers||[]).includes(ME)||c.by===ME}
+function teacherNames(c){const t=c.teachers||[];return t.length?t.map(id=>PROFILES[id]||'老師').join('、'):'未指定'}
+async function loadNames(ids){ids=ids.filter(id=>id&&id!=='me'&&!PROFILES[id]);if(!USER||!ids.length){render();return}try{const ps=await USER.profiles(ids);for(const id of ids){const n=ps&&ps[id]&&ps[id].name;if(n)PROFILES[id]=n}}catch(e){}render()}
+function activeClasses(){return Object.values(CLASSES).filter(c=>c.active!==false&&canSee(c)).sort((a,b)=>(a.order||0)-(b.order||0)||(a.created||0)-(b.created||0))}
+function pickClass(){const a=activeClasses();if(!CUR||!CLASSES[CUR]||CLASSES[CUR].active===false)CUR=a[0]?a[0].id:null;lsSet('class',CUR||'')}
+function classStudents(cid){return Object.values(STUDENTS).filter(s=>s.classId===(cid||CUR)&&s.active!==false).sort((a,b)=>(a.order||0)-(b.order||0)||(a.created||0)-(b.created||0))}
+
+/* ================= actions ================= */
+function addEvent(s,ev){
+  ev.id=uid();ev.t=Date.now();ev.by=ME;
+  s.events=s.events||[];s.events.push(ev);
+  (LOCAL_EV[s.id]||(LOCAL_EV[s.id]=new Map())).set(ev.id,ev);
+  queueWrite(s.id);
+  return ev;
+}
+function setInit(s,k,v){
+  const cur=(s.events||[]).filter(e=>!e.v&&e.k===k);
+  const now=cur.reduce((a,e)=>a+(e.d||0),0);if(now===v)return;
+  cur.forEach(e=>{e.v={t:Date.now(),by:ME,r:'修改原有數量'};(LOCAL_EV[s.id]||(LOCAL_EV[s.id]=new Map())).set(e.id,e)});
+  if(v)addEvent(s,{k,d:v,r:k==='init'?'原有點數':'原有傑立幣'});
+}
+function guard(){if(!CAN){toast('你的帳號只能查看',1);return false}return true}
+function openMiss(s){
+  const evs=(s.events||[]).filter(e=>!e.v);
+  const linked=new Set(evs.filter(e=>e.lk).map(e=>e.lk));
+  const miss=evs.filter(e=>e.k==='item'&&(CFG.items.find(i=>i.id===e.i)||{}).kind==='hw_miss'&&!linked.has(e.id)).sort((a,b)=>b.t-a.t);
+  return miss[0]||null;
+}
+function applyItem(sids,item){
+  if(!guard())return;
+  const names=[];
+  sids.forEach(sid=>{
+    const s=STUDENTS[sid];if(!s)return;
+    const ev={k:'item',i:item.id,n:item.n,d:item.p};
+    if(item.p<0||item.kind==='hw_miss'||item.id==='fail')ev.neg=1;
+    if(item.kind==='hw_late'){const m=openMiss(s);if(m)ev.lk=m.id}
+    addEvent(s,ev);names.push(s.nick||s.name);UI.flash[sid]=item.p>0?'p':item.p<0?'n':'';
+  });
+  if(names.length){toast(`${item.p?sg(item.p)+' ':''}${names.length>3?names.slice(0,3).join('、')+` 等 ${names.length} 人`:names.join('、')} · ${item.n}`,item.p<0);tone(item.p>0?[660,880]:item.p<0?[300,220]:[520])}
+  render();
+}
+function adjust(s,d,reason,note){
+  if(!guard())return;
+  addEvent(s,{k:'adj',d,r:reason,nt:note||'',neg:d<0?1:0});UI.flash[s.id]=d>0?'p':'n';render();
+}
+function voidEvent(s,eid,reason){
+  if(!guard())return;
+  const e=(s.events||[]).find(x=>x.id===eid);if(!e||e.v)return;
+  e.v={t:Date.now(),by:ME,r:reason||'更正'};
+  (LOCAL_EV[s.id]||(LOCAL_EV[s.id]=new Map())).set(e.id,e);
+  queueWrite(s.id);render();toast('已更正，點數已重新計算');
+}
+
+/* ================= render ================= */
+function sortedStudents(){
+  const list=classStudents();
+  if(SORT==='pts')return list.map(s=>[s,stats(s).tot]).sort((a,b)=>b[1]-a[1]).map(x=>x[0]);
+  if(SORT==='week')return list.map(s=>{const t=stats(s);return[s,t.wp+t.wn]}).sort((a,b)=>b[1]-a[1]).map(x=>x[0]);
+  return list;
+}
+function render(){
+  $('#bOv').hidden=!(LOCAL||IS_OWNER);$('#bSet').hidden=!(LOCAL||IS_OWNER);
+  renderClassBar();
+  document.querySelectorAll('[data-sort]').forEach(b=>b.classList.toggle('on',b.dataset.sort===SORT));
+  $('#bBatch').classList.toggle('on',UI.batch);
+  document.body.classList.toggle('batching',UI.batch);
+  document.body.classList.toggle('proj',UI.proj);
+  const grid=$('#grid'),sum=$('#sum');
+  if(!READY){sum.innerHTML='';grid.className='';grid.innerHTML=`<div class="empty"><p>載入資料中…</p></div>`;return}
+  if(!CUR){sum.innerHTML='';grid.className='';grid.innerHTML=`<div class="empty"><h2>建立第一個班級</h2><p>建立班級後輸入學生名字，就可以開始加減點。</p><button class="btn pri" id="goNew">建立班級</button></div>`;$('#goNew').onclick=()=>openManage('classes');renderBatch();return}
+  const list=sortedStudents();
+  if(!list.length){sum.innerHTML='';grid.className='';grid.innerHTML=`<div class="empty"><h2>${esc(CLASSES[CUR].name)} 還沒有學生</h2><p>到「班級與學生」新增學生名單。</p><button class="btn pri" id="goAdd">新增學生</button></div>`;$('#goAdd').onclick=()=>openManage('students');renderBatch();return}
+  const ss=list.map(s=>stats(s));
+  const wp=ss.reduce((a,x)=>a+x.wp,0),wn=ss.reduce((a,x)=>a+x.wn,0),avg=ss.reduce((a,x)=>a+x.tot,0)/ss.length;
+  sum.innerHTML=`<div class="s"><span>學生</span><b>${list.length}</b></div><div class="s p"><span>本週加點</span><b>+${wp}</b></div><div class="s n adminonly"><span>本週扣點</span><b>${wn}</b></div><div class="s"><span>平均點數</span><b>${avg.toFixed(1)}</b></div>`;
+  grid.className='grid'+(UI.batch?' batch':'');
+  const order=classStudents().map(s=>s.id);
+  grid.innerHTML=list.map((s,i)=>cardHTML(s,ss[i],order.indexOf(s.id)+1,SORT!=='seat'?i+1:0)).join('');
+  UI.flash={};
+  renderBatch();
+}
+function renderClassBar(){
+  const a=activeClasses();
+  const showT=!LOCAL&&IS_OWNER&&VIEW_ALL&&!UI.proj;
+  $('#classBar').innerHTML=(!LOCAL&&IS_OWNER&&!UI.proj?`<button class="cchip add adminonly" id="viewToggle">${VIEW_ALL?'全部班級':'只看我的班'} ⇄</button>`:'')+a.map(c=>`<button class="cchip${c.id===CUR?' on':''}" data-c="${c.id}">${esc(c.name)}${showT?`<span class="ct">${esc(teacherNames(c))}</span>`:''}</button>`).join('')+(UI.proj?'':`<button class="cchip add adminonly" id="addClassChip">＋ 班級</button>`)+(a.length||UI.proj||IS_OWNER||LOCAL?'':'<span class="note">管理者還沒有把班級指派給你，也可以按「＋ 班級」自己建立。</span>');
+  $('#classBar').querySelectorAll('[data-c]').forEach(b=>b.onclick=()=>{CUR=b.dataset.c;lsSet('class',CUR);UI.sel.clear();if(LOCAL)render();else subscribeClass()});
+  const ac=$('#addClassChip');if(ac)ac.onclick=()=>openManage('classes');
+  const vt=$('#viewToggle');if(vt)vt.onclick=()=>{VIEW_ALL=!VIEW_ALL;lsSet('viewAll',VIEW_ALL?'1':'0');pickClass();subscribeClass();render()};
+}
+function cardHTML(s,st,seat,rank){
+  const nm=s.nick||s.name;
+  const rec=live(s).sort((a,b)=>b.t-a.t).slice(0,3);
+  const fl=UI.flash[s.id];
+  return `<button class="card${UI.sel.has(s.id)?' sel':''}${fl?' flash-'+fl:''}" style="--tape:${TAPES[hashStr(s.id)%TAPES.length]}" data-id="${s.id}" aria-label="${esc(nm)}">
+    <span class="tick">✓</span>${rank&&rank<=3&&SORT==='pts'?`<span class="rank">第 ${rank} 名</span>`:''}<span class="seat">${String(seat).padStart(2,'0')}</span>
+    <div><div class="nm">${esc(nm)}</div>${s.nick&&s.nick!==s.name&&!UI.proj?`<div class="nk">${esc(s.name)}</div>`:''}</div>
+    <div class="pts${st.tot<0?' neg':''}">${st.tot}<small>點</small></div>
+    <div class="coin">${COIN}<b>${jlLedger(s).bal}</b> 傑立幣</div>
+    <div class="wk">${st.wp||st.wn?`${st.wp?`<span class="p">本週 +${st.wp}</span>`:''}${st.wn?`<span class="n">本週 ${st.wn}</span>`:''}`:'<span class="z">本週還沒有紀錄</span>'}</div>
+    <div class="recent">${rec.map(e=>`<i class="${e.d>0?'p':e.d<0?'n':'z'}">${e.d?sg(e.d)+' ':''}${esc(e.k==='adj'?(e.r||'手動調整'):e.n)}</i>`).join('')}</div>
+  </button>`;
+}
+function itemBtns(list){return list.map(it=>`<button class="ib ${it.p>0?'plus':it.p<0?'minus':'zero'}" data-iid="${esc(it.id)}"><b>${it.p?sg(it.p):'記錄'}</b>${esc(it.n)}</button>`).join('')}
+const itemById=id=>CFG.items.find(i=>i.id===id);
+function renderBatch(){
+  const bar=$('#batchBar');bar.hidden=!UI.batch||UI.proj||!CUR;if(bar.hidden)return;
+  const list=classStudents();
+  $('#batchInner').innerHTML=`<span class="cnt">已選 ${UI.sel.size} 人</span>${itemBtns(CFG.items)}<button class="btn" id="bAll">${UI.sel.size===list.length?'全不選':'全選'}</button><button class="btn pri" id="bDone">完成</button>`;
+  bar.querySelectorAll('[data-iid]').forEach(b=>b.onclick=()=>{if(!UI.sel.size){toast('先點選學生',1);return}confirmBatch(itemById(b.dataset.iid),[...UI.sel])});
+  $('#bAll').onclick=()=>{if(UI.sel.size===list.length)UI.sel.clear();else list.forEach(s=>UI.sel.add(s.id));render()};
+  $('#bDone').onclick=()=>{UI.batch=false;UI.sel.clear();render()};
+}
+/* dedicated screen: pick several students, then give the same points */
+const BSEL=new Set();
+function openBatch(){
+  if(!CUR){toast('請先建立班級',1);return}
+  const list=classStudents();
+  if(!list.length){toast('這班還沒有學生',1);return}
+  for(const id of [...BSEL])if(!STUDENTS[id]||STUDENTS[id].classId!==CUR)BSEL.delete(id);
+  const draw=()=>{
+    $('#bsList').innerHTML=list.map((s,i)=>{const on=BSEL.has(s.id);return `<button class="pick${on?' on':''}" data-pk="${s.id}" aria-pressed="${on}"><span class="pn">${String(i+1).padStart(2,'0')}</span><span class="pm">${esc(s.nick||s.name)}</span><span class="pp">${stats(s).tot}</span></button>`}).join('');
+    $('#bsCnt').textContent=`已選 ${BSEL.size} / ${list.length} 人`;
+    $('#bsList').querySelectorAll('[data-pk]').forEach(b=>b.onclick=()=>{const id=b.dataset.pk;BSEL.has(id)?BSEL.delete(id):BSEL.add(id);draw()});
+  };
+  openModal(`<div class="shtop"><div><h2>批次加減點</h2><p>${esc(CLASSES[CUR].name)} · 先點選學生，再選要加減的項目</p></div>${closeBtn}</div>
+   <h3>1. 選學生</h3>
+   <div class="row" style="margin-bottom:8px"><button class="btn sm" id="bsAll">全選</button><button class="btn sm" id="bsNone">全不選</button><button class="btn sm" id="bsInv">反向選取</button><span class="note" id="bsCnt" style="margin-left:auto"></span></div>
+   <div class="picks" id="bsList"></div>
+   <h3>2. 選項目</h3><div class="items">${itemBtns(CFG.items)}</div>${custHTML()}
+   <h3>或自訂點數</h3>
+   <div class="fields"><label class="f">點數 ±<input type="number" id="bsPts" value="" placeholder="例如 2 或 -1"></label><label class="f">原因（必填）<input type="text" id="bsWhy" placeholder="例如：小組比賽第一名"></label></div>
+   <div class="row" style="margin-top:8px"><button class="btn pri" id="bsGo">送出自訂點數</button></div>`,true);
+  bindClose();draw();bindCust(openBatch);
+  $('#bsAll').onclick=()=>{list.forEach(s=>BSEL.add(s.id));draw()};
+  $('#bsNone').onclick=()=>{BSEL.clear();draw()};
+  $('#bsInv').onclick=()=>{list.forEach(s=>BSEL.has(s.id)?BSEL.delete(s.id):BSEL.add(s.id));draw()};
+  $('#sheet').querySelectorAll('[data-iid]').forEach(b=>b.onclick=()=>{if(!BSEL.size){toast('先點選學生',1);return}confirmBatch(itemById(b.dataset.iid),[...BSEL],true)});
+  $('#bsGo').onclick=()=>{if(!BSEL.size){toast('先點選學生',1);return}const d=parseInt($('#bsPts').value,10)||0,why=$('#bsWhy').value.trim();if(!d){toast('請輸入點數',1);$('#bsPts').focus();return}if(!why){toast('請填寫原因',1);$('#bsWhy').focus();return}confirmBatch({id:'_adj',n:why,p:d,adj:true},[...BSEL],true)};
+}
+function custHTML(){return `<div class="row" style="margin-top:8px"><button class="btn sm" id="cuOpen">＋ 新增自訂項目</button></div><div class="cust" id="cuBox" hidden><label class="f">項目名稱<input type="text" id="cuName" placeholder="例如：上課專心"></label><label class="f">點數（可填負數）<input type="number" id="cuPts" placeholder="例如 1"></label><button class="btn pri" id="cuAdd">新增到項目</button><button class="btn" id="cuNo">取消</button></div>`}
+function bindCust(reopen){
+  const o=$('#cuOpen');if(!o)return;
+  o.onclick=()=>{$('#cuBox').hidden=false;o.hidden=true;$('#cuName').focus()};
+  $('#cuNo').onclick=()=>{$('#cuBox').hidden=true;o.hidden=false};
+  $('#cuAdd').onclick=()=>{if(!guard())return;const n=$('#cuName').value.trim(),p=parseInt($('#cuPts').value,10);if(!n){toast('請輸入項目名稱',1);return}if(isNaN(p)){toast('請輸入點數',1);return}
+    CFG.items.push({id:uid(),n,p});saveDoc('ac_config/points',{items:CFG.items});toast('已新增項目：'+n);render();reopen()};
+}
+function confirmBatch(item,sids,fromScreen){
+  const names=sids.map(id=>STUDENTS[id]).filter(Boolean).map(s=>s.nick||s.name);
+  openModal(`<h2>確認批次${item.p>=0?'加點':'扣點'}</h2>
+   <p>${esc(item.n)} <b style="color:${item.p>0?'var(--plus)':item.p<0?'var(--minus)':'var(--muted)'}">${item.p?sg(item.p)+' 點':'只記錄'}</b></p>
+   <h3>共 ${names.length} 位學生</h3><p style="color:var(--ink)">${names.map(esc).join('、')}</p>
+   <div class="row" style="margin-top:16px;justify-content:flex-end"><button class="btn" id="cNo">取消</button><button class="btn pri" id="cYes">確認送出</button></div>`);
+  $('#cNo').onclick=()=>{if(fromScreen)openBatch();else closeModal()};
+  $('#cYes').onclick=()=>{
+    if(item.adj){if(!guard())return;sids.forEach(id=>{const s=STUDENTS[id];if(s){addEvent(s,{k:'adj',d:item.p,r:item.n,neg:item.p<0?1:0});UI.flash[id]=item.p>0?'p':'n'}});toast(`${sg(item.p)} ${sids.length} 位學生 · ${item.n}`,item.p<0);render()}
+    else applyItem(sids,item);
+    UI.sel.clear();
+    if(fromScreen){BSEL.clear();openBatch()}else{closeModal();render()}
+  };
+}
+
+/* ================= modals ================= */
+function openModal(html,wide){const sh=$('#sheet');sh.className='sheet'+(wide?' wide':'');sh.innerHTML=html;$('#modal').hidden=false}
+function closeModal(){$('#modal').hidden=true;$('#sheet').innerHTML=''}
+$('#modal').addEventListener('click',e=>{if(e.target.id==='modal')closeModal()});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('#modal').hidden)closeModal()});
+function armed(btn,fn){btn.onclick=()=>{if(btn.classList.contains('armed'))fn();else{btn.classList.add('armed');btn.dataset.t=btn.textContent;btn.textContent='再按一次確認';setTimeout(()=>{if(btn.isConnected){btn.classList.remove('armed');btn.textContent=btn.dataset.t}},3000)}}}
+const closeBtn='<button class="btn" id="mClose">關閉</button>';
+function bindClose(){const b=$('#mClose');if(b)b.onclick=closeModal}
+
+function openStudent(sid,tab){
+  const s=STUDENTS[sid];if(!s)return;
+  tab=tab||'pts';
+  const nm=s.nick||s.name,st=stats(s);
+  const proj=UI.proj;
+  const items=proj?CFG.items.filter(i=>i.p>0):CFG.items;
+  let body='';
+  if(tab==='pts'){
+    body=`<div class="bigpts"><b>${st.tot}</b><span class="note">總點數</span>${st.wp?`<span class="chip ok">本週 +${st.wp}</span>`:''}${st.wn&&!proj?`<span class="chip" style="background:var(--minus-s);color:var(--minus)">本週 ${st.wn}</span>`:''}</div>
+    <h3>${proj?'加點':'快速加減點'}</h3><div class="items">${itemBtns(items)}</div>${proj?'':custHTML()}
+    ${proj?'':`<p class="note" style="margin-top:6px">有幾項作業就按幾次。補交會自動對應最近一筆「沒有交功課」。</p>
+    <div class="row" style="margin-top:12px"><button class="btn" id="aOpen">手動調整</button></div>
+    <div id="aBox" hidden><h3>手動調整（需填原因）</h3>
+    <div class="fields"><label class="f">點數 ±<input type="number" id="aPts" value="0" step="1"></label><label class="f">原因（必填）<input type="text" id="aWhy" placeholder="例如：課堂表現優秀"></label><label class="f">備註<input type="text" id="aNote"></label></div>
+    <div class="row" style="margin-top:8px"><button class="btn pri" id="aGo">送出調整</button><button class="btn" id="aCancel">取消</button></div></div>`}`;
+  }else if(tab==='jl')body=jlStudentHTML(s);
+  else body=logHTML([s],100);
+  openModal(`<div class="shtop"><div><h2>${esc(nm)}</h2><p>${esc(s.name)} · ${esc((CLASSES[s.classId]||{}).name||'')}</p></div>${closeBtn}</div>
+   ${proj?'':`<div class="tabs"><button class="tab${tab==='pts'?' on':''}" data-tab="pts">加減點</button><button class="tab${tab==='jl'?' on':''}" data-tab="jl">傑立幣</button><button class="tab${tab==='log'?' on':''}" data-tab="log">紀錄</button></div>`}${body}`);
+  bindClose();
+  $('#sheet').querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>openStudent(sid,b.dataset.tab));
+  if(tab==='pts'&&!proj)bindCust(()=>openStudent(sid));
+  if(tab==='jl')bindJlStudent(s,()=>openStudent(sid,'jl'));
+  if(tab==='pts'){
+    $('#sheet').querySelectorAll('[data-iid]').forEach(b=>b.onclick=()=>{applyItem([sid],itemById(b.dataset.iid));openStudent(sid)});
+    if(!proj){
+      $('#aOpen').onclick=()=>{$('#aBox').hidden=false;$('#aOpen').hidden=true;$('#aPts').focus()};
+      $('#aCancel').onclick=()=>{$('#aBox').hidden=true;$('#aOpen').hidden=false};
+      $('#aGo').onclick=()=>{const d=parseInt($('#aPts').value,10)||0,why=$('#aWhy').value.trim();if(!d){toast('請輸入要調整的點數',1);return}if(!why){toast('請填寫調整原因',1);$('#aWhy').focus();return}adjust(s,d,why,$('#aNote').value.trim());toast('已調整');openStudent(sid)};
+    }
+  }else bindLog([s],()=>openStudent(sid,'log'));
+}
+
+function evDesc(e){
+  if(e.k==='feed')return esc(e.n||'餵食')+(e.fav?'（最愛）':'');
+  if(e.k==='pick')return esc(e.n||'指定孵化');
+  let t=e.k==='adj'?'手動調整':esc(e.n||'');
+  if(e.r)t+=' · '+esc(e.r);
+  if(e.nt)t+=' · 備註：'+esc(e.nt);
+  if(e.lk)t+=' · 對應未交紀錄';
+  return t;
+}
+function logHTML(list,limit){
+  const rows=[];list.forEach(s=>(s.events||[]).forEach(e=>rows.push({s,e})));
+  rows.sort((a,b)=>b.e.t-a.e.t);
+  const show=rows.slice(0,limit||200);
+  const ids=[...new Set(show.map(r=>r.e.by).concat(show.filter(r=>r.e.v).map(r=>r.e.v.by)).filter(x=>x&&x!=='me'))];
+  if(USER&&ids.length)USER.profiles(ids).then(ps=>{let ch=false;for(const id of ids){const n=ps&&ps[id]&&ps[id].name;if(n&&PROFILES[id]!==n){PROFILES[id]=n;ch=true}}if(ch)document.querySelectorAll('[data-by]').forEach(el=>{const n=PROFILES[el.dataset.by];if(n)el.textContent=n})}).catch(()=>{});
+  const who=id=>`<span data-by="${esc(id)}">${esc(PROFILES[id]||(id===ME?'我':'老師'))}</span>`;
+  if(!show.length)return '<h3>異動紀錄</h3><p>還沒有紀錄。</p>';
+  return `<h3>異動紀錄（最近 ${show.length} 筆）</h3><p class="note">紀錄不會被刪除。按「更正」會保留原紀錄並重新計算點數。</p><ul class="log">${show.map(({s,e})=>`<li class="${e.v?'void':''}"><span class="t">${fmtT(e.t)}</span>${list.length>1?`<b>${esc(s.nick||s.name)}</b>`:''}<span class="d ${e.d>0?'p':e.d<0?'n':''}">${e.d?sg(e.d):e.k==='feed'?'♥':'·'}</span><span class="what">${evDesc(e)}${e.l?` · 親密度 ${sg(e.l)}`:''}<br><span class="by">${who(e.by)}${e.v?` · 已更正（${esc(e.v.r)}，${fmtT(e.v.t)}，${who(e.v.by)}）`:''}</span></span>${e.v?'':`<button class="btn sm x" data-void="${s.id}|${e.id}">更正</button>`}</li>`).join('')}</ul>`;
+}
+function bindLog(list,reopen){
+  $('#sheet').querySelectorAll('[data-void]').forEach(b=>b.onclick=()=>{
+    const [sid,eid]=b.dataset.void.split('|');
+    const li=b.closest('li');
+    if(li.querySelector('.vwhy'))return;
+    const box=document.createElement('div');box.className='row vwhy';box.style.flexBasis='100%';
+    box.innerHTML=`<input type="text" placeholder="更正原因（必填），例如：按錯學生" style="flex:1 1 220px"><button class="btn sm pri">確認更正</button><button class="btn sm">取消</button>`;
+    li.appendChild(box);
+    const [inp,ok,no]=box.children;inp.focus();
+    no.onclick=()=>box.remove();
+    ok.onclick=()=>{const r=inp.value.trim();if(!r){toast('請填寫更正原因',1);inp.focus();return}voidEvent(STUDENTS[sid],eid,r);reopen()};
+  });
+}
+function openLog(){
+  const list=classStudents();
+  openModal(`<div class="shtop"><h2>${esc((CLASSES[CUR]||{}).name||'')} 異動紀錄</h2>${closeBtn}</div>${logHTML(list,300)}`,true);
+  bindClose();bindLog(list,openLog);
+}
+function evDesc(e){
+  if(e.k==='jl')return '傑立幣 · '+esc(e.n||'');
+  if(e.k==='jladj')return '傑立幣調整 · '+esc(e.r||'');
+  if(e.k==='init')return '原有點數';
+  if(e.k==='jlinit')return '原有傑立幣';
+  let t=e.k==='adj'?'手動調整':esc(e.n||'');
+  if(e.r)t+=' · '+esc(e.r);
+  if(e.nt)t+=' · 備註：'+esc(e.nt);
+  if(e.lk)t+=' · 對應未交紀錄';
+  return t;
+}
+
+/* ---- 傑立幣 ---- */
+function jlBooksOf(list){const set=new Set();list.forEach(s=>Object.keys(jlLedger(s).books).forEach(b=>set.add(b)));return [...set]}
+function jlStudentHTML(s){
+  const L=jlLedger(s);
+  const books=Object.keys(L.books);
+  const adjEv=(s.events||[]).filter(e=>!e.v&&(e.k==='jladj'||e.k==='jlinit'));
+  return `<div class="bigpts"><b>${L.bal}</b><span class="note">傑立幣</span><span class="chip">考試獲得 ${L.earned}</span>${L.adj?`<span class="chip">原有／調整 ${sg(L.adj)}</span>`:''}</div>
+   <h3>各冊進度（一冊最多 ${JL_CAP}）</h3>${books.length?`<div class="scroll"><table class="jt"><thead><tr><th>冊別</th>${JL_LES.map(l=>`<th>${l[0].length>2?l[1].replace('考',''):'L'+l[0]}</th>`).join('')}<th>合計</th></tr></thead><tbody>${books.map(bn=>{const b=L.books[bn];return `<tr><td><b>${esc(bn)}</b></td>${JL_LES.map(([l])=>{const x=b.les[l];const max=compsOf(l).length===3?10:10;return `<td>${x?`<span class="jc ${x._sum>=max?'full':'part'}">${x._sum}</span>`:'<span class="jc none">·</span>'}</td>`}).join('')}<td><b>${b.total}</b>${b.raw>JL_CAP?' <span class="note">(上限)</span>':''}</td></tr>`}).join('')}</tbody></table></div>`:'<p>還沒有傑立幣紀錄，到上方「發送傑立幣」登記。</p>'}
+   <h3>手動調整（兌換、補登，需填原因）</h3>
+   <div class="fields"><label class="f">傑立幣 ±<input type="number" id="jaV" placeholder="兌換請填負數，例如 -20"></label><label class="f">原因（必填）<input type="text" id="jaWhy" placeholder="例如：兌換文具"></label></div>
+   <div class="row" style="margin-top:8px"><button class="btn pri" id="jaGo">送出</button></div>`;
+}
+function bindJlStudent(s,reopen){
+  $('#jaGo').onclick=()=>{if(!guard())return;const d=parseInt($('#jaV').value,10)||0,why=$('#jaWhy').value.trim();if(!d){toast('請輸入傑立幣數量',1);return}if(!why){toast('請填寫原因',1);return}
+    const bal=jlLedger(s).bal;if(bal+d<0){toast(`傑立幣不夠，目前只有 ${bal}`,1);return}
+    addEvent(s,{k:'jladj',d,r:why,neg:d<0?1:0});toast(`${sg(d)} 傑立幣 · ${s.nick||s.name}`);render();reopen()};
+}
+const JSEL=new Set();
+function openJl(){
+  if(!CUR){toast('請先建立班級',1);return}
+  const list=classStudents();if(!list.length){toast('這班還沒有學生',1);return}
+  const c=CLASSES[CUR];
+  const UIJ=openJl.st||(openJl.st={});
+  const book=UIJ[CUR+'b']||c.jlBook||'第 1 冊';
+  const les=UIJ[CUR+'l']||'1';
+  for(const id of [...JSEL])if(!STUDENTS[id]||STUDENTS[id].classId!==CUR)JSEL.delete(id);
+  const books=jlBooksOf(list);if(!books.includes(book))books.push(book);
+  const comps=compsOf(les);
+  const draw=()=>{
+    $('#jsList').innerHTML=list.map((s,i)=>{const on=JSEL.has(s.id);const L=jlLedger(s),x=(L.books[book]||{les:{}}).les[les]||{};
+      return `<button class="pick${on?' on':''}" data-pk="${s.id}" aria-pressed="${on}"><span class="pn">${String(i+1).padStart(2,'0')}</span><span class="pm">${esc(s.nick||s.name)}</span><span class="pp">${L.bal}</span><span class="marks">${comps.map(k=>`<i class="${x[k]?x[k].kind==='first'?'f':'r':''}">${JL_COMP[k][0]}${x[k]?x[k].kind==='first'?' ✓':' 補':''}</i>`).join('')}${x._bonus?'<i class="f">+1</i>':''}</span></button>`}).join('');
+    $('#jsCnt').textContent=`已選 ${JSEL.size} / ${list.length} 人`;
+    $('#jsList').querySelectorAll('[data-pk]').forEach(b=>b.onclick=()=>{const id=b.dataset.pk;JSEL.has(id)?JSEL.delete(id):JSEL.add(id);draw()});
+  };
+  const prog=`<div class="scroll"><table class="jt"><thead><tr><th>學生</th>${JL_LES.map(l=>`<th>${l[0].length>2?l[1].replace('考',''):'L'+l[0]}</th>`).join('')}<th>本冊</th><th>傑立幣</th></tr></thead><tbody>${list.map(s=>{const L=jlLedger(s),b=L.books[book];return `<tr><td>${esc(s.nick||s.name)}</td>${JL_LES.map(([l])=>{const x=b&&b.les[l];return `<td>${x?`<span class="jc ${x._sum>=10?'full':'part'}">${x._sum}</span>`:'<span class="jc none">·</span>'}</td>`}).join('')}<td><b>${b?b.total:0}</b></td><td><b>${L.bal}</b></td></tr>`}).join('')}</tbody></table></div>`;
+  openModal(`<div class="shtop"><div><h2>發送傑立幣</h2><p>${esc(c.name)} · 每課 單字3＋單元考3＋Sensay3，三項都一次通過再 +1＝10；補考通過 +1；期中／期末 筆試5＋口說5；一冊最多 ${JL_CAP}</p></div>${closeBtn}</div>
+   <div class="fields" style="margin-top:10px"><label class="f">冊別<input type="text" id="jBook" list="jBooks" value="${esc(book)}"><datalist id="jBooks">${books.map(b=>`<option value="${esc(b)}">`).join('')}</datalist></label>
+   <label class="f">課次<select id="jLes">${JL_LES.map(([k,n])=>`<option value="${k}"${k===les?' selected':''}>${n}</option>`).join('')}</select></label></div>
+   <h3>1. 選學生</h3>
+   <div class="row" style="margin-bottom:8px"><button class="btn sm" id="jsAll">全選</button><button class="btn sm" id="jsNone">全不選</button><button class="btn sm" id="jsInv">反向選取</button><span class="note" id="jsCnt" style="margin-left:auto"></span></div>
+   <div class="picks" id="jsList"></div>
+   <h3>2. ${esc(book)} ${lesName(les)} · 選通過的項目</h3>
+   <div class="jlbtns">${comps.map(k=>`<button class="ib coinb" data-jc="${k}|first"><b>+${JL_COMP[k][1]}</b>${JL_COMP[k][0]} 一次通過</button>`).join('')}${comps.map(k=>`<button class="ib coinr" data-jc="${k}|retake"><b>+1</b>${JL_COMP[k][0]} 補考通過</button>`).join('')}</div>
+   ${comps.length===3?'<p class="note" style="margin-top:6px">單字、單元考、Sensay 三項都「一次通過」時，系統會自動多給 1 枚，這課剛好 10 枚。</p>':''}
+   <h3>${esc(book)} 全班進度</h3>${prog}`,true);
+  bindClose();draw();
+  const keep=()=>{UIJ[CUR+'b']=$('#jBook').value.trim()||book;UIJ[CUR+'l']=$('#jLes').value};
+  $('#jBook').onchange=()=>{keep();if(c.jlBook!==UIJ[CUR+'b']&&CAN){c.jlBook=UIJ[CUR+'b'];const {id:_,_new,...d}=c;saveDoc('ac_classes/'+CUR,d)}openJl()};
+  $('#jLes').onchange=()=>{keep();openJl()};
+  $('#jsAll').onclick=()=>{list.forEach(s=>JSEL.add(s.id));draw()};
+  $('#jsNone').onclick=()=>{JSEL.clear();draw()};
+  $('#jsInv').onclick=()=>{list.forEach(s=>JSEL.has(s.id)?JSEL.delete(s.id):JSEL.add(s.id));draw()};
+  $('#sheet').querySelectorAll('[data-jc]').forEach(b=>b.onclick=()=>{
+    if(!JSEL.size){toast('先點選學生',1);return}
+    const [comp,kind]=b.dataset.jc.split('|');
+    keep();const bk=UIJ[CUR+'b'];
+    const d=kind==='first'?JL_COMP[comp][1]:1;
+    const sids=[...JSEL];
+    const skip=sids.filter(id=>{const x=((jlLedger(STUDENTS[id]).books[bk]||{les:{}}).les[les]||{});return !!x[comp]});
+    const go=sids.filter(id=>!skip.includes(id));
+    const nm=id=>STUDENTS[id].nick||STUDENTS[id].name;
+    openModal(`<h2>確認發送傑立幣</h2><p>${esc(bk)} ${lesName(les)} · ${JL_COMP[comp][0]} ${kind==='first'?'一次通過':'補考通過'} <b style="color:#b77900">+${d} 枚</b></p>
+     <h3>發給 ${go.length} 位</h3><p style="color:var(--ink)">${go.map(id=>esc(nm(id))).join('、')||'（沒有）'}</p>
+     ${skip.length?`<h3>已經登記過，會略過</h3><p>${skip.map(id=>esc(nm(id))).join('、')}</p>`:''}
+     <div class="row" style="margin-top:16px;justify-content:flex-end"><button class="btn" id="cNo">返回</button><button class="btn pri" id="cYes"${go.length?'':' disabled'}>確認發送</button></div>`);
+    $('#cNo').onclick=()=>openJl();
+    $('#cYes').onclick=()=>{if(!guard())return;let bonus=0,capped=0;
+      go.forEach(id=>{const s=STUDENTS[id];const before=jlLedger(s);const bb=before.books[bk];
+        addEvent(s,{k:'jl',book:bk,les,comp,kind,d,n:`${bk} ${lesName(les)} ${JL_COMP[comp][0]}${kind==='first'?'一次通過':'補考通過'}`});
+        const after=jlLedger(s),ab=after.books[bk],x=ab.les[les];if(x._bonus&&!(bb&&bb.les[les]&&bb.les[les]._bonus))bonus++;if(ab.raw>JL_CAP&&(!bb||bb.raw<=JL_CAP||ab.raw>bb.raw))capped++;UI.flash[id]='p'});
+      toast(`+${d} 傑立幣 · ${go.length} 人${bonus?`，${bonus} 人這課全部一次通過再 +1`:''}${capped?`，${capped} 人已達本冊上限 ${JL_CAP}`:''}`);
+      render();JSEL.clear();openJl()};
+  });
+}
+
+/* ---- school-wide overview (manager) ---- */
+async function openOverview(range){
+  range=range||'week';
+  openModal(`<div class="shtop"><h2>全校總覽</h2>${closeBtn}</div><p>載入中…</p>`,true);bindClose();
+  let studs=Object.values(STUDENTS);
+  if(DB){try{const r=await DB.collection('ac_students').get();studs=r.docs.filter(d=>d.exists).map(d=>({...clone(d.data()),id:d.id}))}catch(e){toast('讀取失敗，請再試一次',1)}}
+  const now=new Date(),day0=new Date(now.getFullYear(),now.getMonth(),now.getDate()).getTime();
+  const from={today:day0,week:weekStart(),month:new Date(now.getFullYear(),now.getMonth(),1).getTime(),all:0}[range];
+  const cls=Object.values(CLASSES).filter(c=>c.active!==false&&(LOCAL||IS_OWNER||canSee(c))).sort((a,b)=>(a.order||0)-(b.order||0)||(a.created||0)-(b.created||0));
+  const byT={},byI={};let tot={pos:0,neg:0,n:0};
+  const rows=cls.map(c=>{
+    const ss=studs.filter(x=>x.classId===c.id&&x.active!==false);
+    let pos=0,neg=0,n=0,last=0,sumTot=0;
+    ss.forEach(x=>{
+      sumTot+=stats(x).tot;
+      live(x).forEach(e=>{if(e.t<from)return;n++;const d=e.d||0;if(d>0)pos+=d;if(d<0)neg+=d;last=Math.max(last,e.t);
+        const t=byT[e.by]||(byT[e.by]={n:0,pos:0,neg:0,last:0});t.n++;if(d>0)t.pos+=d;if(d<0)t.neg+=d;t.last=Math.max(t.last,e.t);
+        const key=e.k==='adj'?'手動調整':e.n;const it=byI[key]||(byI[key]={n:0,d:0});it.n++;it.d+=d});
+    });
+    tot.pos+=pos;tot.neg+=neg;tot.n+=n;
+    return {c,ss,pos,neg,n,last,avg:ss.length?sumTot/ss.length:0};
+  });
+  await loadNames(Object.keys(byT));
+  const R_={today:'今天',week:'本週',month:'本月',all:'全部'};
+  const maxI=Math.max(1,...Object.values(byI).map(x=>x.n));
+  openModal(`<div class="shtop"><h2>全校總覽</h2>${closeBtn}</div>
+   <div class="tabs">${Object.entries(R_).map(([k,t])=>`<button class="tab${range===k?' on':''}" data-r="${k}">${t}</button>`).join('')}</div>
+   <div class="ovk"><div class="k"><span>班級</span><b>${cls.length}</b></div><div class="k"><span>學生</span><b>${rows.reduce((a,r)=>a+r.ss.length,0)}</b></div><div class="k p"><span>${R_[range]}加點</span><b>+${tot.pos}</b></div><div class="k n"><span>${R_[range]}扣點</span><b>${tot.neg}</b></div><div class="k"><span>${R_[range]}操作</span><b>${tot.n}</b></div></div>
+   <h3>各班</h3><div class="scroll"><table class="tbl"><thead><tr><th>班級</th><th>負責老師</th><th>學生</th><th>加點</th><th>扣點</th><th>操作次數</th><th>平均點數</th><th>最近操作</th><th></th></tr></thead><tbody>${rows.map(r=>`<tr><td><b>${esc(r.c.name)}</b></td><td>${esc(teacherNames(r.c))}</td><td class="num">${r.ss.length}</td><td class="num pos">+${r.pos}</td><td class="num neg">${r.neg}</td><td class="num">${r.n}</td><td class="num">${r.avg.toFixed(1)}</td><td class="note">${r.last?fmtT(r.last):'—'}</td><td><button class="btn sm" data-go="${r.c.id}">開啟</button></td></tr>`).join('')}</tbody></table></div>
+   <h3>項目統計（${R_[range]}）</h3>${Object.keys(byI).length?`<div class="scroll"><table class="tbl"><thead><tr><th>項目</th><th>次數</th><th>點數合計</th></tr></thead><tbody>${Object.entries(byI).sort((a,b)=>b[1].n-a[1].n).map(([k,x])=>`<tr><td>${esc(k)}</td><td class="num"><span class="ibar" style="width:${Math.round(x.n/maxI*120)}px;background:${x.d<0?'var(--minus)':x.d>0?'var(--plus)':'var(--muted)'}"></span>${x.n}</td><td class="num ${x.d>0?'pos':x.d<0?'neg':''}">${x.d?sg(x.d):'0'}</td></tr>`).join('')}</tbody></table></div>`:'<p>這段時間還沒有紀錄。</p>'}
+   <h3>老師操作（${R_[range]}）</h3>${Object.keys(byT).length?`<div class="scroll"><table class="tbl"><thead><tr><th>老師</th><th>操作次數</th><th>加點</th><th>扣點</th><th>最近操作</th></tr></thead><tbody>${Object.entries(byT).sort((a,b)=>b[1].n-a[1].n).map(([id,t])=>`<tr><td>${esc(PROFILES[id]||(id===ME?'我':'老師'))}</td><td class="num">${t.n}</td><td class="num pos">+${t.pos}</td><td class="num neg">${t.neg}</td><td class="note">${fmtT(t.last)}</td></tr>`).join('')}</tbody></table></div>`:'<p>這段時間還沒有操作紀錄。</p>'}`,true);
+  bindClose();
+  $('#sheet').querySelectorAll('[data-r]').forEach(b=>b.onclick=()=>openOverview(b.dataset.r));
+  $('#sheet').querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>{const id=b.dataset.go;if(!canSee(CLASSES[id])){VIEW_ALL=true;lsSet('viewAll','1')}CUR=id;lsSet('class',id);UI.sel.clear();closeModal();if(LOCAL)render();else subscribeClass()});
+}
+
+function openManage(tab){
+  tab=tab||(CUR?'students':'classes');
+  const all=Object.values(CLASSES).filter(c=>LOCAL||IS_OWNER||canSee(c)).sort((a,b)=>(a.order||0)-(b.order||0)||(a.created||0)-(b.created||0));
+  const tabs=`<div class="tabs"><button class="tab${tab==='classes'?' on':''}" data-t="classes">班級</button><button class="tab${tab==='students'?' on':''}" data-t="students"${CUR?'':' disabled'}>學生</button></div>`;
+  let body='';
+  if(tab==='classes'){
+    const tids=Object.keys(TEACHERS);
+    const tcell=c=>IS_OWNER&&!LOCAL?`<div class="tchk">${tids.length?tids.map(id=>`<label><input type="checkbox" data-ct="${c.id}|${id}"${(c.teachers||[]).includes(id)?' checked':''}>${esc(PROFILES[id]||'老師')}${id===ME?'（我）':''}</label>`).join(''):'<span class="note">還沒有其他老師登入過</span>'}</div>`:esc(teacherNames(c));
+    body=`<h3>新增班級</h3><div class="row"><input type="text" id="ncName" placeholder="例如：H1、K1A" style="flex:1 1 200px"><button class="btn pri" id="ncAdd">新增</button></div>
+    <h3>所有班級</h3>${all.length?`<div class="scroll"><table class="tbl"><thead><tr><th>班級名稱</th>${LOCAL?'':'<th>負責老師</th>'}<th>狀態</th><th></th></tr></thead><tbody>${all.map(c=>`<tr><td><input type="text" data-cn="${c.id}" value="${esc(c.name)}"></td>${LOCAL?'':`<td>${tcell(c)}</td>`}<td>${c.active===false?'<span class="chip">已停用</span>':'<span class="chip" style="color:var(--ok);background:var(--ok-s)">使用中</span>'}</td><td class="row"><button class="btn sm" data-csave="${c.id}">儲存名稱</button><button class="btn sm${c.active===false?'':' warn'}" data-ctog="${c.id}">${c.active===false?'重新啟用':'停用'}</button></td></tr>`).join('')}</tbody></table></div>`:'<p>還沒有班級。</p>'}
+    <p class="note">停用的班級會從班級列表隱藏，資料都會保留。${LOCAL?'':IS_OWNER?'勾選負責老師後，那位老師登入就只會看到自己的班。老師要先用分享連結登入一次，才會出現在名單裡。':'你只會看到管理者指派給你、或你自己建立的班級。'}</p>`;
+  }else{
+    const list=Object.values(STUDENTS).filter(s=>s.classId===CUR).sort((a,b)=>(a.created||0)-(b.created||0));
+    body=`<h3>新增學生到 ${esc(CLASSES[CUR].name)}</h3><textarea id="nsList" placeholder="一行一位學生：姓名, 暱稱, 原有點數, 原有傑立幣（後面三項可以省略）&#10;王小明, Ming, 25, 40&#10;陳美美, Mia, 12&#10;林大同"></textarea><div class="row" style="margin-top:8px"><button class="btn pri" id="nsAdd">新增學生</button><span class="note">一次可以貼上整班名單。</span></div>
+    <h3>學生名單</h3>${list.length?`<div class="scroll"><table class="tbl"><thead><tr><th>姓名</th><th>暱稱（投影顯示）</th><th>原有點數</th><th>原有傑立幣</th><th>班級</th><th>狀態</th><th></th></tr></thead><tbody>${list.map(s=>`<tr><td><input type="text" data-sn="${s.id}" value="${esc(s.name)}"></td><td><input type="text" data-sk="${s.id}" value="${esc(s.nick||'')}"></td><td><input type="number" data-si="${s.id}" value="${initPts(s)}" style="width:80px"></td><td><input type="number" data-sj="${s.id}" value="${initJl(s)}" style="width:80px"></td><td><select data-sc="${s.id}">${all.map(c=>`<option value="${c.id}"${c.id===s.classId?' selected':''}>${esc(c.name)}</option>`).join('')}</select></td><td>${s.active===false?'<span class="chip">已停用</span>':'<span class="chip" style="color:var(--ok);background:var(--ok-s)">在學</span>'}</td><td class="row"><button class="btn sm" data-ssave="${s.id}">儲存</button><button class="btn sm${s.active===false?'':' warn'}" data-stog="${s.id}">${s.active===false?'恢復':'停用'}</button></td></tr>`).join('')}</tbody></table></div>`:'<p>這班還沒有學生。</p>'}`;
+  }
+  openModal(`<div class="shtop"><h2>班級與學生</h2>${closeBtn}</div>${tabs}${body}`,true);
+  bindClose();
+  $('#sheet').querySelectorAll('[data-t]').forEach(b=>b.onclick=()=>openManage(b.dataset.t));
+  if(tab==='classes'){
+    $('#ncAdd').onclick=()=>{if(!guard())return;const n=$('#ncName').value.trim();if(!n){toast('請輸入班級名稱',1);return}const id=uid();const c={name:n,active:true,created:Date.now(),order:Object.keys(CLASSES).length,by:ME,teachers:[ME]};CLASSES[id]={...c,id,_new:1};saveDoc('ac_classes/'+id,c);CUR=id;lsSet('class',id);subscribeClass();render();toast('已新增 '+n);openManage('students')};
+    $('#sheet').querySelectorAll('[data-csave]').forEach(b=>b.onclick=()=>{if(!guard())return;const id=b.dataset.csave,c=CLASSES[id],n=$(`[data-cn="${id}"]`).value.trim();if(!n)return;c.name=n;const {id:_,_new,...d}=c;saveDoc('ac_classes/'+id,d);render();toast('已儲存')});
+    $('#sheet').querySelectorAll('[data-ct]').forEach(cb=>cb.onchange=()=>{if(!guard())return;const [cid,tid]=cb.dataset.ct.split('|'),c=CLASSES[cid];const t=new Set(c.teachers||[]);cb.checked?t.add(tid):t.delete(tid);c.teachers=[...t];const {id:_,_new,...d}=c;saveDoc('ac_classes/'+cid,d);render();toast('已更新負責老師')});
+    $('#sheet').querySelectorAll('[data-ctog]').forEach(b=>b.onclick=()=>{if(!guard())return;const id=b.dataset.ctog,c=CLASSES[id];c.active=c.active===false;const {id:_,_new,...d}=c;saveDoc('ac_classes/'+id,d);pickClass();subscribeClass();render();openManage('classes')});
+  }else{
+    $('#nsAdd').onclick=()=>{
+      if(!guard())return;
+      const lines=$('#nsList').value.split('\n').map(x=>x.trim()).filter(Boolean);if(!lines.length){toast('請輸入學生名字',1);return}
+      const base=Date.now();
+      lines.forEach((l,i)=>{const [n,k,ip,ij]=l.split(/[,，、\t]/).map(x=>x&&x.trim());const id=uid();STUDENTS[id]={id,classId:CUR,name:n,nick:k||'',active:true,created:base+i,events:[],hatch:{}};const s=STUDENTS[id];const a=parseInt(ip,10),j=parseInt(ij,10);if(a)addEvent(s,{k:'init',d:a,r:'原有點數'});if(j)addEvent(s,{k:'jlinit',d:j,r:'原有傑立幣'});NEWSTU.add(id);queueWrite(id)});
+      render();toast(`已新增 ${lines.length} 位學生`);openManage('students');
+    };
+    $('#sheet').querySelectorAll('[data-ssave]').forEach(b=>b.onclick=()=>{if(!guard())return;const id=b.dataset.ssave,s=STUDENTS[id];s.name=$(`[data-sn="${id}"]`).value.trim()||s.name;s.nick=$(`[data-sk="${id}"]`).value.trim();const nc=$(`[data-sc="${id}"]`).value;s.classId=nc;setInit(s,'init',parseInt($(`[data-si="${id}"]`).value,10)||0);setInit(s,'jlinit',parseInt($(`[data-sj="${id}"]`).value,10)||0);queueWrite(id);render();toast('已儲存');openManage('students')});
+    $('#sheet').querySelectorAll('[data-stog]').forEach(b=>b.onclick=()=>{if(!guard())return;const id=b.dataset.stog,s=STUDENTS[id];s.active=s.active===false;queueWrite(id);render();openManage('students')});
+  }
+}
+
+/* ---- rules (manager) ---- */
+function openSettings(){
+  if(!LOCAL&&!IS_OWNER){toast('規則設定只有管理者可以修改',1);return}
+  const rowH=(it,k)=>`<tr><td><input type="text" data-in="${k}" value="${esc(it.n)}"></td><td><input type="number" data-ip="${k}" value="${it.p}" style="width:90px"></td><td><select data-ik="${k}"><option value="">一般</option><option value="hw_miss"${it.kind==='hw_miss'?' selected':''}>未交作業</option><option value="hw_late"${it.kind==='hw_late'?' selected':''}>補交（對應未交）</option></select></td><td><button class="btn sm warn" data-idel="${k}">刪除</button></td></tr>`;
+  openModal(`<div class="shtop"><h2>規則設定</h2>${closeBtn}</div><p>所有老師、所有班級共用同一套加減點項目。</p>
+   <h3>加減點項目</h3><div class="scroll"><table class="tbl"><thead><tr><th>項目名稱</th><th>點數</th><th>類型</th><th></th></tr></thead><tbody id="itRows">${CFG.items.map(rowH).join('')}</tbody></table></div>
+   <div class="row" style="margin-top:8px"><button class="btn" id="itAdd">＋ 新增項目</button><span class="note">點數填 0 代表只記錄不加減點（例如考試未通過）。</span></div>
+   <div class="row" style="margin-top:12px;justify-content:flex-end"><button class="btn pri" id="itSave">儲存規則</button></div>
+   <h3>匯出</h3><div class="row"><button class="btn" id="dCsv">下載點數表（CSV）</button><button class="btn" id="dJson">下載完整備份（JSON）</button></div>
+   <textarea id="dText" placeholder="如果無法直接下載，內容會出現在這裡" style="margin-top:8px;min-height:60px"></textarea>`,true);
+  bindClose();
+  let items=clone(CFG.items);
+  const read=()=>{items=items.map((it,k)=>({...it,n:$(`[data-in="${k}"]`).value.trim()||it.n,p:parseInt($(`[data-ip="${k}"]`).value,10)||0,kind:$(`[data-ik="${k}"]`).value||undefined}))};
+  const draw=()=>{$('#itRows').innerHTML=items.map(rowH).join('');$('#itRows').querySelectorAll('[data-idel]').forEach(b=>armed(b,()=>{read();items.splice(+b.dataset.idel,1);draw()}))};
+  draw();
+  $('#itAdd').onclick=()=>{read();items.push({id:uid(),n:'新項目',p:1});draw()};
+  $('#itSave').onclick=()=>{if(!guard())return;read();if(!items.length){toast('至少要有一個項目',1);return}CFG.items=items.map(x=>{const o={...x};if(!o.kind)delete o.kind;return o});saveDoc('ac_config/points',{items:CFG.items});render();toast('規則已儲存')};
+  const dump=async()=>{let classes=CLASSES,students=STUDENTS;if(DB){try{const a=await DB.collection('ac_classes').get();classes={};a.docs.forEach(d=>classes[d.id]=d.data());const b=await DB.collection('ac_students').get();students={};b.docs.forEach(d=>students[d.id]=d.data())}catch(e){}}return{classes,students}};
+  const save=async(name,text,type)=>{let dl=null;try{dl=await window.claude?.use?.('downloads')}catch(e){}if(dl){try{await dl.save({filename:name,data:new Blob([text],{type})});return}catch(e){}}if(FB){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([text],{type}));a.download=name;document.body.appendChild(a);a.click();a.remove();return}$('#dText').value=text;$('#dText').select();toast('已放在下方文字框，請全選複製')};
+  $('#dCsv').onclick=async()=>{const d=await dump();const its=CFG.items;const rows=[['班級','姓名','暱稱','總點數','原有點數','本週加點','本週扣點',...its.map(i=>i.n+'（次）'),'手動調整（次）','傑立幣']];
+    for(const s of Object.values(d.students)){if(s.active===false)continue;const st=stats(s),L=live(s);rows.push([(d.classes[s.classId]||{}).name||'',s.name,s.nick||'',st.tot,initPts(s),st.wp,st.wn,...its.map(i=>L.filter(e=>e.i===i.id).length),L.filter(e=>e.k==='adj').length,jlLedger(s).bal])}
+    save(`班級加減點_${new Date().toISOString().slice(0,10)}.csv`,'﻿'+rows.map(r=>r.map(x=>`"${String(x).replace(/"/g,'""')}"`).join(',')).join('\n'),'text/csv')};
+  $('#dJson').onclick=async()=>{const d=await dump();save(`班級加減點備份_${new Date().toISOString().slice(0,10)}.json`,JSON.stringify({exported:new Date().toISOString(),...d,config:CFG},null,1),'application/json')};
+}
+
+/* ================= misc ================= */
+function toast(msg,neg){const box=$('#toasts');const t=document.createElement('div');t.className='toast'+(neg?' neg':'');t.textContent=msg;box.appendChild(t);while(box.children.length>3)box.firstChild.remove();setTimeout(()=>t.remove(),2600)}
+let AC,SOUND=lsGet('sound')!=='0';
+function tone(fs,dur=.09){if(!SOUND)return;try{AC=AC||new(window.AudioContext||window.webkitAudioContext)();const t0=AC.currentTime;fs.forEach((f,i)=>{const o=AC.createOscillator(),g=AC.createGain(),t=t0+i*dur;o.type='triangle';o.frequency.value=f;g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(.14,t+.02);g.gain.exponentialRampToValueAtTime(.0001,t+dur+.08);o.connect(g).connect(AC.destination);o.start(t);o.stop(t+dur+.1)})}catch(e){}}
+$('#grid').addEventListener('click',e=>{const card=e.target.closest('.card');if(!card)return;const id=card.dataset.id;if(UI.batch&&!UI.proj){UI.sel.has(id)?UI.sel.delete(id):UI.sel.add(id);render()}else openStudent(id)});
+$('#bBatch').onclick=()=>openBatch();
+$('#bJl').onclick=()=>openJl();
+$('#bLog').onclick=()=>{if(CUR)openLog()};
+$('#bManage').onclick=()=>openManage();
+$('#bOv').onclick=()=>openOverview();
+$('#bSet').onclick=()=>openSettings();
+document.querySelectorAll('[data-sort]').forEach(b=>b.onclick=()=>{SORT=b.dataset.sort;lsSet('sort',SORT);render()});
+$('#bProj').onclick=()=>{UI.proj=true;UI.batch=false;UI.sel.clear();try{const p=document.documentElement.requestFullscreen&&document.documentElement.requestFullscreen();if(p&&p.catch)p.catch(()=>{})}catch(e){}render()};
+$('#bProjExit').onclick=()=>{UI.proj=false;try{if(document.fullscreenElement)document.exitFullscreen()}catch(e){}closeModal();render()};
+render();init();
+</script>
+
+</body>
+</html>
